@@ -1,21 +1,46 @@
 import re
 
-from selenium import webdriver
+from selenium.webdriver import FirefoxOptions, Firefox, ChromeOptions, Chrome
 from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.firefox.service import Service as FirefoxService
 from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.firefox import GeckoDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException
 
-from const import get_username, get_password, INPUT_FILE_PATH, OUTPUT_DIR
+from captions_scraper.const import get_username, get_password, NTULEARN_URL
 
 
-def init_driver():
-    # TODO: support other browsers
+def init_driver(headless=True, browser="chrome"):
+    if browser.lower() == "firefox":
+        options = FirefoxOptions()
+        service = FirefoxService(GeckoDriverManager().install())
 
-    driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))
+    elif browser.lower() == "chrome":
+        options = ChromeOptions()
+        service = ChromeService(ChromeDriverManager().install())
+
+    if headless:
+        options.headless = True
+    else:
+        options.headless = False
+
+    # disable console logging
+    options.add_experimental_option("excludeSwitches", ["enable-logging"])
+    options.add_argument("--log-level=3")
+
+    if browser.lower() == "firefox":
+        driver = Firefox(service=service, options=options)
+    elif browser.lower() == "chrome":
+        driver = Chrome(service=service, options=options)
+
+    # keep browser open
+    options.add_experimental_option("detach", True)
 
     driver.set_page_load_timeout(60)
+    driver.implicitly_wait(1)
     driver.maximize_window()
     return driver
 
@@ -24,35 +49,68 @@ def login(driver):
     usernameInput = get_username()
     passwordInput = get_password()
 
-    driver.get("https://ntulearn.ntu.edu.sg/")
-    driver.implicitly_wait(30)
+    driver.get(NTULEARN_URL)
 
-    username = driver.find_element(By.XPATH, "//input[@id='userNameInput']")
-    password = driver.find_element(By.XPATH, "//input[@id='passwordInput']")
-
-    submit = driver.find_element(By.XPATH, "//span[@id='submitButton']")
+    username = WebDriverWait(driver, 5).until(
+        EC.presence_of_element_located((By.XPATH, "//input[@id='userNameInput']"))
+    )
+    password = WebDriverWait(driver, 5).until(
+        EC.presence_of_element_located((By.XPATH, "//input[@id='passwordInput']"))
+    )
+    login = WebDriverWait(driver, 5).until(
+        EC.presence_of_element_located(
+            (By.XPATH, "//span[@onclick='return Login.submitLoginRequest();']")
+        )
+    )
 
     username.send_keys(usernameInput)
     password.send_keys(passwordInput)
 
-    submit.click()
+    login.click()
+
+
+def is_on_login_page(driver):
+    try:
+        driver.find_element(
+            By.XPATH, "//span[@onclick='return Login.submitLoginRequest();']"
+        )
+    except NoSuchElementException:
+        return False
+    return True
+
+
+def is_page_not_found(driver):
+    try:
+        driver.find_element(By.XPATH, "//div[@id='bbNG.receiptTag.content']")
+    except NoSuchElementException:
+        return False
+    return True
 
 
 def scrape_captions(url, driver):
     # load NTUlearn link containing kaltura video
     driver.get(url)
-    driver.implicitly_wait(30)
 
-    # get valid file name
+    # re-login on session timeout
+    if is_page_not_found(driver) or is_on_login_page(driver):
+        login(driver)
+        driver.get(url)
+
     course_title = driver.find_element(
-        By.XPATH,
-        "//h1[@analytics-id='components.directives.content.panelHeader.secondaryTitle.header']",
-    )
-    video_title = driver.find_element(
         By.XPATH, "//span[@ng-if='::!panelHeaderTitleTranslateKey']"
     )
+
+    video_title = WebDriverWait(driver, 5).until(
+        EC.presence_of_element_located(
+            (
+                By.XPATH,
+                "//h1[@analytics-id='components.directives.content.panelHeader.secondaryTitle.header']",
+            )
+        )
+    )
+
     title = (
-        get_valid_file_name(course_title.text)
+        get_valid_file_name(course_title.get_attribute("innerText"))
         + "_"
         + get_valid_file_name(video_title.text)
     )
@@ -79,7 +137,6 @@ def scrape_captions(url, driver):
 
     # load captions text file
     driver.get(captions_url)
-    driver.implicitly_wait(30)
 
     captions = driver.find_element(By.XPATH, "//pre").text
     return captions, title
@@ -110,24 +167,3 @@ def parse_captions(captions):
         clean_text_list.append(line)
     clean_text = " ".join(clean_text_list)
     return clean_text
-
-
-def main():
-    driver = init_driver()
-    login(driver)
-
-    with open(INPUT_FILE_PATH) as input_file:
-        urls = input_file.read().splitlines()
-        for url in urls:
-            # TODO: check if logged in
-            captions, title = scrape_captions(url, driver)
-            clean_text = parse_captions(captions)
-
-            output_file_name = title + ".txt"
-            output_file_path = OUTPUT_DIR + output_file_name
-            with open(output_file_path, "w") as output_file:
-                output_file.write(clean_text)
-
-
-if __name__ == "__main__":
-    main()
