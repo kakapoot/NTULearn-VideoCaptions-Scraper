@@ -13,27 +13,28 @@ from selenium.common.exceptions import NoSuchElementException
 from captions_scraper.const import get_username, get_password, NTULEARN_URL
 
 
-def init_driver(headless=True, browser="chrome"):
-    if browser.lower() == "firefox":
+def init_driver(headless=True, firefox=False):
+    if firefox:
         options = FirefoxOptions()
         service = FirefoxService(GeckoDriverManager().install())
 
-    elif browser.lower() == "chrome":
+    else:
         options = ChromeOptions()
         service = ChromeService(ChromeDriverManager().install())
 
+        # disable console logging
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])
+        options.add_argument("--log-level=3")
+
     if headless:
+        print("Running in headless mode")
         options.headless = True
     else:
         options.headless = False
 
-    # disable console logging
-    options.add_experimental_option("excludeSwitches", ["enable-logging"])
-    options.add_argument("--log-level=3")
-
-    if browser.lower() == "firefox":
+    if firefox:
         driver = Firefox(service=service, options=options)
-    elif browser.lower() == "chrome":
+    else:
         driver = Chrome(service=service, options=options)
 
     # keep browser open
