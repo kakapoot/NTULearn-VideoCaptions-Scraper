@@ -17,8 +17,14 @@ def load_env(key):
 
 
 def get_username():
-    return load_env("NTU_USERNAME")
+    username = load_env("NTU_USERNAME")
+    if not username:
+        print("NTULearn username missing from .env file")
+    return username
 
 
 def get_password():
-    return load_env("NTU_PASSWORD")
+    password = load_env("NTU_PASSWORD")
+    if not password:
+        print("NTULearn password missing from .env file")
+    return password

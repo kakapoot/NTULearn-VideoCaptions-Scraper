@@ -133,13 +133,14 @@ def scrape_captions(url, driver):
             EC.presence_of_element_located((By.XPATH, "//track[@kind='subtitles']"))
         )
         captions_url = track.get_attribute("src")
+
+        # load captions text file
+        driver.get(captions_url)
+
+        captions = driver.find_element(By.XPATH, "//pre").text
     except:
         print("Unable to get video captions")
 
-    # load captions text file
-    driver.get(captions_url)
-
-    captions = driver.find_element(By.XPATH, "//pre").text
     return captions, title
 
 

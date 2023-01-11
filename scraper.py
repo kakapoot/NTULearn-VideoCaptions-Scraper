@@ -15,7 +15,9 @@ def get_captions(driver):
     login(driver)
 
     if is_on_login_page(driver):
-        print("Failed to login")
+        print(
+            "Failed to login. Check if correct NTULearn login details have been entered in .env file"
+        )
         return
 
     else:
